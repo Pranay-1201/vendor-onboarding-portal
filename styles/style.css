@@ -1,0 +1,15 @@
+.stButton > button {
+    width: 100%;
+    background: linear-gradient(135deg,#5B0E9B,#8E3FD1);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(91,14,155,0.25);
+}
+
+.stButton > button:hover {
+    background: linear-gradient(135deg,#4B0082,#7B2CBF);
+    color: white;
+}

@@ -1,0 +1,8 @@
+.streamlit/secrets.toml
+venv/
+__pycache__/
+*.pyc
+uploads/
+vendors.csv
+test_email.py
+test_db.py
