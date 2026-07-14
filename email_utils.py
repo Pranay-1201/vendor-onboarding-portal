@@ -1,11 +1,28 @@
+import os
 import smtplib
 from email.message import EmailMessage
 
-# ── Email account that SENDS all mail (fill in your values) ──
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = "parthipranay2001@gmail.com"
-SMTP_PASS = "vkxlrrhbrkjzemyd"
+
+def _cfg(key, default=None):
+    """Read a setting from Streamlit secrets, falling back to an env var."""
+    try:
+        import streamlit as st
+        try:
+            val = st.secrets[key]
+            if val is not None and str(val) != "":
+                return val
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+
+# ── Credentials live in .streamlit/secrets.toml — never in this file ──
+SMTP_HOST = _cfg("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(_cfg("SMTP_PORT", "587"))
+SMTP_USER = _cfg("SMTP_USER")
+SMTP_PASS = _cfg("SMTP_PASS")
 
 
 def _send(to_addrs, subject, body):

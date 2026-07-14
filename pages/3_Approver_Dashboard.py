@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.get("logged_in", False):
-    st.switch_page("pages/2_Approver_Login.py")
+    st.switch_page("pages/2_Approver_login.py")
 
 user_email = st.session_state.get("user_email", "")
 
@@ -47,7 +47,7 @@ with col2:
     if st.button("Logout"):
         for k in ["logged_in", "user_email", "role", "roles", "otp_email"]:
             st.session_state.pop(k, None)
-        st.switch_page("pages/2_Approver_Login.py")
+        st.switch_page("pages/2_Approver_login.py")
 
 col1, col2 = st.columns([10, 1])
 with col1:

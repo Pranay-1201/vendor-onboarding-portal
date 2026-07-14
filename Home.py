@@ -72,19 +72,22 @@ with col1:
 st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
 # Three action cards
-left, col1, gap1, col2, gap2, col3, right = st.columns([0.5, 6.5, 0.5, 6.5, 0.5, 6.5, 0.5])
+left, col1, gap1, col2, gap2, col3, right = st.columns([0.5, 6, 1, 6, 1, 6, 0.5])
 
 with col1:
     st.markdown("""
     <div style="
     background:#E8F5E9;
-    padding:20px;
-    border-radius:35px;
+    padding:24px;
+    border-radius:28px;
     border-left:6px solid #4CAF50;
-    min-height:120px;
+    height:170px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
     ">
-    <h3>🏢 New Registration</h3>
-    <p>Register vendors/customers and upload documents.</p>
+    <h3 style="margin:0 0 8px 0;">🏢 New Registration</h3>
+    <p style="margin:0;">Register a new vendor or customer and upload documents.</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
@@ -95,13 +98,16 @@ with col2:
     st.markdown("""
     <div style="
     background:#FFF8E1;
-    padding:20px;
-    border-radius:35px;
+    padding:24px;
+    border-radius:28px;
     border-left:6px solid #FFB300;
-    min-height:120px;
+    height:170px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
     ">
-    <h3>📄 Re-upload Documents</h3>
-    <p>Asked for more documents? Upload them here.</p>
+    <h3 style="margin:0 0 8px 0;">📄 Re-upload Documents</h3>
+    <p style="margin:0;">Already applied and asked for more documents? Upload them here.</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
@@ -112,18 +118,21 @@ with col3:
     st.markdown("""
     <div style="
     background:#E3F2FD;
-    padding:20px;
-    border-radius:35px;
+    padding:24px;
+    border-radius:28px;
     border-left:6px solid #2196F3;
-    min-height:120px;
+    height:170px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
     ">
-    <h3>🔐 Approver Portal</h3>
-    <p>Review documents and approve applications.</p>
+    <h3 style="margin:0 0 8px 0;">🔐 Approver Portal</h3>
+    <p style="margin:0;">Internal team: review documents and approve applications.</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
     if st.button("Login as Approver", use_container_width=True):
-        st.switch_page("pages/2_Approver_Login.py")
+        st.switch_page("pages/2_Approver_login.py")
 
 st.markdown("---")
 
