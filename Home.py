@@ -72,7 +72,7 @@ with col1:
 st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
 # Three action cards
-left, col1, gap1, col2, gap2, col3, right = st.columns([0.5, 6, 1, 6, 1, 6, 0.5])
+left, col1, gap1, col2, gap2, col3, right = st.columns([0.5, 6.5, 0.5, 6.5, 0.5, 6.5, 0.5])
 
 with col1:
     st.markdown("""
