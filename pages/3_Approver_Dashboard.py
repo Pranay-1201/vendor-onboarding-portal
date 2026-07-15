@@ -191,30 +191,53 @@ else:
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 elif lower.endswith(".pdf"):
-                    # Option A — inline preview via a Blob URL iframe (same page).
-                    # Blob URLs avoid the base64-in-iframe block browsers enforce.
+                    # Option B — render each PDF page to a canvas image with PDF.js.
+                    # The browser only ever sees images, so nothing gets blocked.
                     preview_html = f"""
-                    <div id="pdfbox_{selected_doc}" style="width:100%;height:800px;
-                         border:1px solid #ddd;border-radius:8px;overflow:hidden;"></div>
+                    <div id="pdf_{selected_doc}" style="width:100%;background:#f5f5f5;
+                         border:1px solid #ddd;border-radius:8px;padding:10px;
+                         max-height:800px;overflow-y:auto;text-align:center;">
+                       <p style="font-family:sans-serif;color:#666;">Loading PDF…</p>
+                    </div>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
                     <script>
                     (function() {{
                         const b64 = "{b64}";
                         const bytes = atob(b64);
                         const arr = new Uint8Array(bytes.length);
                         for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-                        const blob = new Blob([arr], {{type: "application/pdf"}});
-                        const url = URL.createObjectURL(blob);
-                        const box = document.getElementById("pdfbox_{selected_doc}");
-                        const frame = document.createElement("iframe");
-                        frame.src = url;
-                        frame.style.width = "100%";
-                        frame.style.height = "100%";
-                        frame.style.border = "none";
-                        box.appendChild(frame);
+
+                        const box = document.getElementById("pdf_{selected_doc}");
+
+                        pdfjsLib.GlobalWorkerOptions.workerSrc =
+                          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+                        pdfjsLib.getDocument({{data: arr}}).promise.then(function(pdf) {{
+                            box.innerHTML = "";
+                            for (let p = 1; p <= pdf.numPages; p++) {{
+                                pdf.getPage(p).then(function(page) {{
+                                    const scale = 1.5;
+                                    const viewport = page.getViewport({{scale: scale}});
+                                    const canvas = document.createElement("canvas");
+                                    canvas.style.marginBottom = "10px";
+                                    canvas.style.maxWidth = "100%";
+                                    canvas.style.boxShadow = "0 1px 4px rgba(0,0,0,0.2)";
+                                    const ctx = canvas.getContext("2d");
+                                    canvas.height = viewport.height;
+                                    canvas.width = viewport.width;
+                                    page.render({{canvasContext: ctx, viewport: viewport}});
+                                    box.appendChild(canvas);
+                                }});
+                            }}
+                        }}).catch(function(err) {{
+                            box.innerHTML =
+                              "<p style='font-family:sans-serif;color:#a00;'>Could not render PDF: " +
+                              err.message + "</p>";
+                        }});
                     }})();
                     </script>
                     """
-                    components.html(preview_html, height=820)
+                    components.html(preview_html, height=820, scrolling=True)
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 else:
