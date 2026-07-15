@@ -191,12 +191,25 @@ else:
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 elif lower.endswith(".pdf"):
-                    # Option B — render each PDF page to a canvas image with PDF.js.
-                    # The browser only ever sees images, so nothing gets blocked.
+                    # Option B — render PDF pages to canvas images with PDF.js,
+                    # plus zoom controls. Browser only sees images, never blocked.
                     preview_html = f"""
+                    <div style="text-align:center;margin-bottom:8px;font-family:sans-serif;">
+                       <button id="zout_{selected_doc}"
+                          style="padding:6px 14px;margin:0 3px;border:none;border-radius:6px;
+                                 background:#7B2CBF;color:white;cursor:pointer;font-size:16px;">−</button>
+                       <span id="zlvl_{selected_doc}"
+                          style="display:inline-block;min-width:52px;font-size:14px;color:#333;">150%</span>
+                       <button id="zin_{selected_doc}"
+                          style="padding:6px 14px;margin:0 3px;border:none;border-radius:6px;
+                                 background:#7B2CBF;color:white;cursor:pointer;font-size:16px;">+</button>
+                       <button id="zreset_{selected_doc}"
+                          style="padding:6px 14px;margin:0 3px;border:none;border-radius:6px;
+                                 background:#999;color:white;cursor:pointer;font-size:13px;">Reset</button>
+                    </div>
                     <div id="pdf_{selected_doc}" style="width:100%;background:#f5f5f5;
                          border:1px solid #ddd;border-radius:8px;padding:10px;
-                         max-height:800px;overflow-y:auto;text-align:center;">
+                         max-height:760px;overflow:auto;text-align:center;">
                        <p style="font-family:sans-serif;color:#666;">Loading PDF…</p>
                     </div>
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -207,16 +220,20 @@ else:
                         const arr = new Uint8Array(bytes.length);
                         for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
 
-                        const box = document.getElementById("pdf_{selected_doc}");
+                        const box  = document.getElementById("pdf_{selected_doc}");
+                        const lvl  = document.getElementById("zlvl_{selected_doc}");
+                        let scale = 1.5;
+                        let pdfDoc = null;
 
                         pdfjsLib.GlobalWorkerOptions.workerSrc =
                           "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-                        pdfjsLib.getDocument({{data: arr}}).promise.then(function(pdf) {{
+                        function render() {{
+                            if (!pdfDoc) return;
                             box.innerHTML = "";
-                            for (let p = 1; p <= pdf.numPages; p++) {{
-                                pdf.getPage(p).then(function(page) {{
-                                    const scale = 1.5;
+                            lvl.textContent = Math.round(scale / 1.5 * 100) + "%";
+                            for (let p = 1; p <= pdfDoc.numPages; p++) {{
+                                pdfDoc.getPage(p).then(function(page) {{
                                     const viewport = page.getViewport({{scale: scale}});
                                     const canvas = document.createElement("canvas");
                                     canvas.style.marginBottom = "10px";
@@ -229,15 +246,30 @@ else:
                                     box.appendChild(canvas);
                                 }});
                             }}
+                        }}
+
+                        pdfjsLib.getDocument({{data: arr}}).promise.then(function(pdf) {{
+                            pdfDoc = pdf;
+                            render();
                         }}).catch(function(err) {{
                             box.innerHTML =
                               "<p style='font-family:sans-serif;color:#a00;'>Could not render PDF: " +
                               err.message + "</p>";
                         }});
+
+                        document.getElementById("zin_{selected_doc}").onclick = function() {{
+                            scale = Math.min(scale + 0.3, 4.5); render();
+                        }};
+                        document.getElementById("zout_{selected_doc}").onclick = function() {{
+                            scale = Math.max(scale - 0.3, 0.6); render();
+                        }};
+                        document.getElementById("zreset_{selected_doc}").onclick = function() {{
+                            scale = 1.5; render();
+                        }};
                     }})();
                     </script>
                     """
-                    components.html(preview_html, height=820, scrolling=True)
+                    components.html(preview_html, height=840, scrolling=True)
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 else:
