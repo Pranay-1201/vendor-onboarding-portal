@@ -191,15 +191,11 @@ else:
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 elif lower.endswith(".pdf"):
-                    # Browsers block inline base64 PDFs, so offer an "open in new tab"
-                    # link (via a Blob) plus a normal download button.
-                    open_html = f"""
-                    <a id="open_{selected_doc}" href="#"
-                       style="display:inline-block;padding:8px 16px;background:#7B2CBF;
-                              color:white;border-radius:8px;text-decoration:none;
-                              font-family:sans-serif;font-size:14px;">
-                       🔍 Open {selected_doc} in new tab
-                    </a>
+                    # Option A — inline preview via a Blob URL iframe (same page).
+                    # Blob URLs avoid the base64-in-iframe block browsers enforce.
+                    preview_html = f"""
+                    <div id="pdfbox_{selected_doc}" style="width:100%;height:800px;
+                         border:1px solid #ddd;border-radius:8px;overflow:hidden;"></div>
                     <script>
                     (function() {{
                         const b64 = "{b64}";
@@ -208,15 +204,17 @@ else:
                         for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
                         const blob = new Blob([arr], {{type: "application/pdf"}});
                         const url = URL.createObjectURL(blob);
-                        const link = document.getElementById("open_{selected_doc}");
-                        if (link) link.onclick = function(e) {{
-                            e.preventDefault();
-                            window.open(url, "_blank");
-                        }};
+                        const box = document.getElementById("pdfbox_{selected_doc}");
+                        const frame = document.createElement("iframe");
+                        frame.src = url;
+                        frame.style.width = "100%";
+                        frame.style.height = "100%";
+                        frame.style.border = "none";
+                        box.appendChild(frame);
                     }})();
                     </script>
                     """
-                    components.html(open_html, height=60)
+                    components.html(preview_html, height=820)
                     st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
 
                 else:
