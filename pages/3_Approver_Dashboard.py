@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import os
 import base64
@@ -181,14 +182,45 @@ else:
             st.write(f"Uploaded File: {file_name}")
             fb = get_document_bytes(vendor, file_name)
             if fb:
-                st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
-                if file_name.lower().endswith(".pdf"):
-                    st.markdown(
-                        f'<iframe src="data:application/pdf;base64,{base64.b64encode(fb).decode()}" '
-                        f'width="100%" height="800" type="application/pdf"></iframe>',
-                        unsafe_allow_html=True)
-                elif file_name.lower().endswith((".png", ".jpg", ".jpeg")):
+                b64 = base64.b64encode(fb).decode()
+                lower = file_name.lower()
+
+                if lower.endswith((".png", ".jpg", ".jpeg")):
+                    # Images render inline fine
                     st.image(fb, use_container_width=True)
+                    st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
+
+                elif lower.endswith(".pdf"):
+                    # Browsers block inline base64 PDFs, so offer an "open in new tab"
+                    # link (via a Blob) plus a normal download button.
+                    open_html = f"""
+                    <a id="open_{selected_doc}" href="#"
+                       style="display:inline-block;padding:8px 16px;background:#7B2CBF;
+                              color:white;border-radius:8px;text-decoration:none;
+                              font-family:sans-serif;font-size:14px;">
+                       🔍 Open {selected_doc} in new tab
+                    </a>
+                    <script>
+                    (function() {{
+                        const b64 = "{b64}";
+                        const bytes = atob(b64);
+                        const arr = new Uint8Array(bytes.length);
+                        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                        const blob = new Blob([arr], {{type: "application/pdf"}});
+                        const url = URL.createObjectURL(blob);
+                        const link = document.getElementById("open_{selected_doc}");
+                        if (link) link.onclick = function(e) {{
+                            e.preventDefault();
+                            window.open(url, "_blank");
+                        }};
+                    }})();
+                    </script>
+                    """
+                    components.html(open_html, height=60)
+                    st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
+
+                else:
+                    st.download_button(f"Download {selected_doc}", fb, file_name=file_name)
             else:
                 st.warning("File not found in database.")
         else:
