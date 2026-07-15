@@ -42,7 +42,7 @@ if role not in held_roles:
 
 col1, col2 = st.columns([10, 1])
 with col1:
-    if st.button("🏠 Home"):
+    if st.button("Home"):
         st.switch_page("Home.py")
 with col2:
     if st.button("Logout"):
