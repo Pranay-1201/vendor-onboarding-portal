@@ -150,7 +150,7 @@ else:
         st.subheader("Vendors")
         all_statuses = sorted(view_df["Status"].unique().tolist())
 
-        fc, dc1, dc2, cc = st.columns([2, 1.2, 1.2, 1])
+        fc, dc1, dc2, cc = st.columns([3, 1.4, 1.4, 0.9])
         with fc:
             sel = st.multiselect("Filter by status", options=all_statuses,
                                  default=all_statuses, placeholder="Choose statuses")
@@ -159,10 +159,10 @@ else:
         import datetime as _dt
         use_dates = "Submitted On" in view_df.columns
         with dc1:
-            from_date = st.date_input("From date", value=None,
+            from_date = st.date_input("From", value=None,
                                       format="DD-MM-YYYY", disabled=not use_dates)
         with dc2:
-            to_date = st.date_input("To date", value=None,
+            to_date = st.date_input("To", value=None,
                                     format="DD-MM-YYYY", disabled=not use_dates)
 
         filtered_df = view_df[view_df["Status"].isin(sel)] if sel else view_df
@@ -183,7 +183,86 @@ else:
         with cc:
             st.metric("Showing", f"{len(filtered_df)} / {len(view_df)}")
 
+        REQUIRED_DOCS = {
+            "Customer": ["PAN Proof", "GST Proof", "Cancelled Cheque", "Agreement",
+                         "EFT Form", "MSME Certificate"],
+            "Raw Material Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                      "MSME Certificate"],
+            "Packaging Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "PM Agreement", "MSME Certificate"],
+            "Logistics Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "Transport License", "Fleet Details", "Agreement",
+                                   "MSME Certificate"],
+            "Warehouse Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "Warehouse License", "Quality Audit Report", "Fire NOC",
+                                   "ESG Compliance Certificate", "Insurance Certificate",
+                                   "Agreement", "MSME Certificate"],
+            "Contract Manufacturer": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                      "Agreement", "ESG Compliance Certificate",
+                                      "Quality Audit Report", "Factory License",
+                                      "Manufacturing License", "MSME Certificate"],
+            "Service Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                 "Agreement", "Department Head Approval", "MSME Certificate"],
+        }
+
         st.dataframe(filtered_df, use_container_width=True)
+
+        # ── CSV EXPORT (what's on screen, plus a Y/N/NA column per document) ──
+        ALL_DOC_TYPES = sorted({d for docs_list in REQUIRED_DOCS.values() for d in docs_list})
+
+        SUMMARY_COLS = [
+            "Party ID", "Party Type", "Vendor Type", "Vendor Name", "Submitted On",
+            "Status", "PAN Number", "GST Number",
+            "Contact Person", "Mobile Number", "Email 1",
+            "City", "State", "Country", "Pincode",
+            "Bank Name", "Account Number", "IFSC Code",
+            "Assigned To", "Approved By", "Approved On",
+            "Reviewed By Finance", "Vendor Code", "BP Code", "TDS Status",
+            "Code Created By", "Code Created On", "Remarks",
+        ]
+
+        @st.cache_data(ttl=60, show_spinner=False)
+        def _build_export(names_tuple):
+            rows = []
+            for nm in names_tuple:
+                match = df[df["Vendor Name"] == nm]
+                if match.empty:
+                    continue
+                rec = match.iloc[0]
+                row = {c: _field(rec, c) for c in SUMMARY_COLS}
+
+                v_type = _field(rec, "Vendor Type")
+                expected = set(REQUIRED_DOCS.get(v_type, []))
+                uploaded = {d[0] for d in list_documents(nm)}
+
+                for doc in ALL_DOC_TYPES:
+                    if doc not in expected:
+                        row[doc] = "NA"
+                    else:
+                        row[doc] = "Y" if doc in uploaded else "N"
+                rows.append(row)
+            return pd.DataFrame(rows)
+
+        ex1, ex2 = st.columns([1, 3])
+        with ex1:
+            if st.button("Prepare CSV export", use_container_width=True):
+                st.session_state["_export_ready"] = True
+
+        if st.session_state.get("_export_ready"):
+            export_df = _build_export(tuple(filtered_df["Vendor Name"].tolist()))
+            fname = "onboarding_export"
+            if from_date:
+                fname += f"_from_{from_date.strftime('%d-%m-%Y')}"
+            if to_date:
+                fname += f"_to_{to_date.strftime('%d-%m-%Y')}"
+            with ex2:
+                st.download_button(
+                    f"⬇ Download CSV ({len(export_df)} records)",
+                    export_df.to_csv(index=False).encode("utf-8"),
+                    file_name=f"{fname}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
         st.markdown("---")
         if filtered_df.empty:
             st.warning("No vendors match the selected filter.")
@@ -220,28 +299,6 @@ else:
                 st.write(f"**Code created on:** {_field(vendor_row, 'Code Created On') or '— not yet —'}")
 
         # ── DOCUMENT CHECKLIST (what was required vs what arrived) ──
-        REQUIRED_DOCS = {
-            "Customer": ["PAN Proof", "GST Proof", "Cancelled Cheque", "Agreement",
-                         "EFT Form", "MSME Certificate"],
-            "Raw Material Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                      "MSME Certificate"],
-            "Packaging Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                   "PM Agreement", "MSME Certificate"],
-            "Logistics Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                   "Transport License", "Fleet Details", "Agreement",
-                                   "MSME Certificate"],
-            "Warehouse Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                   "Warehouse License", "Quality Audit Report", "Fire NOC",
-                                   "ESG Compliance Certificate", "Insurance Certificate",
-                                   "Agreement", "MSME Certificate"],
-            "Contract Manufacturer": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                      "Agreement", "ESG Compliance Certificate",
-                                      "Quality Audit Report", "Factory License",
-                                      "Manufacturing License", "MSME Certificate"],
-            "Service Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
-                                 "Agreement", "Department Head Approval", "MSME Certificate"],
-        }
-
         docs = list_documents(vendor)
         uploaded_types = {d[0] for d in docs}
         expected = REQUIRED_DOCS.get(vendor_type, sorted(uploaded_types))
