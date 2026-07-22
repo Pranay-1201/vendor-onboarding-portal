@@ -106,9 +106,30 @@ def risk_chip(label, level):
 
 
 def _field(row, *names):
+    """
+    Read a field from a record, tolerating list/dict values.
+
+    Some fields (e.g. Shipping Addresses) hold a list. pd.notna() on a list
+    returns an ARRAY of booleans, which `if` cannot evaluate — hence the
+    explicit type check before the notna() call.
+    """
     for n in names:
-        if n in row.index and pd.notna(row[n]):
-            return str(row[n])
+        if n not in row.index:
+            continue
+        val = row[n]
+
+        # List / tuple / dict — handle before any truthiness test
+        if isinstance(val, (list, tuple)):
+            return "; ".join(str(v) for v in val) if len(val) else ""
+        if isinstance(val, dict):
+            return str(val) if val else ""
+
+        try:
+            if pd.notna(val):
+                return str(val)
+        except (TypeError, ValueError):
+            # Anything array-like that slipped through
+            return str(val)
     return ""
 
 
