@@ -329,7 +329,7 @@ else:
         with col1:
             gst_cert = st.file_uploader("GST Certificate *")
             cancelled_cheque = st.file_uploader("Cancelled Cheque *")
-            Agreement = st.file_uploader("Agreement *")
+            Agreement = st.file_uploader("Agreement")
         with col2:
             pan_card = st.file_uploader("PAN Card *")
             transport_license = st.file_uploader("Transport License *")
@@ -351,7 +351,7 @@ else:
         with col3:
             msme = st.file_uploader("MSME Certificate")
             insurance = st.file_uploader("Insurance Certificate *")
-            Agreement = st.file_uploader("Agreement *")
+            Agreement = st.file_uploader("Agreement")
 
     elif vendor_type == "Contract Manufacturer":
         col1, col2, col3 = st.columns(3)
@@ -360,7 +360,7 @@ else:
             pan_card = st.file_uploader("PAN Card *")
             cancelled_cheque = st.file_uploader("Cancelled Cheque *")
         with col2:
-            Agreement = st.file_uploader("Agreement *")
+            Agreement = st.file_uploader("Agreement")
             ESG_Compliance_certificate = st.file_uploader("ESG Compliance Certificate *")
             Quality_Audit_Report = st.file_uploader("Quality Audit Report *")
         with col3:
@@ -375,7 +375,7 @@ else:
             pan_card = st.file_uploader("PAN Card *")
         with col2:
             cancelled_cheque = st.file_uploader("Cancelled Cheque *")
-            Agreement = st.file_uploader("Agreement *")
+            Agreement = st.file_uploader("Agreement")
         with col3:
             msme = st.file_uploader("MSME Certificate")
             Dept_Head_Approval = st.file_uploader("Department Head Approval *")
@@ -465,27 +465,27 @@ if st.button(f"Submit {label}"):
 
         elif vendor_type == "Logistics Provider":
             if not (gst_cert and pan_card and cancelled_cheque and
-                    transport_license and fleet_details and Agreement):
+                    transport_license and fleet_details):
                 st.error("Please upload all mandatory (*) documents")
                 st.stop()
 
         elif vendor_type == "Warehouse Provider":
             if not (gst_cert and pan_card and cancelled_cheque and warehouse_license
-                    and fire_noc and insurance and Agreement and Quality_Audit_Report
+                    and fire_noc and insurance and Quality_Audit_Report
                     and ESG_Compliance_certificate):
                 st.error("Please upload all mandatory (*) documents")
                 st.stop()
 
         elif vendor_type == "Contract Manufacturer":
             if not (gst_cert and pan_card and cancelled_cheque and manufacturing_license
-                    and factory_license and Agreement and Quality_Audit_Report
+                    and factory_license and Quality_Audit_Report
                     and ESG_Compliance_certificate):
                 st.error("Please upload all mandatory (*) documents")
                 st.stop()
 
         elif vendor_type == "Service Provider":
             if not (gst_cert and pan_card and cancelled_cheque and
-                    Agreement and Dept_Head_Approval):
+                    Dept_Head_Approval):
                 st.error("Please upload all mandatory (*) documents")
                 st.stop()
 
@@ -553,11 +553,31 @@ if st.button(f"Submit {label}"):
         cleaned = "".join(c for c in name if c.isalnum() or c in (" ", ".", "-", "_")).strip()
         return cleaned or "file"
 
-    from db_utils import vendor_exists, save_vendor, save_document
+    from datetime import datetime
+    from db_utils import (save_vendor, save_document, check_duplicates,
+                          next_party_id)
 
-    if vendor_exists(vendor_name, gst_number):
-        st.error(f"{label} already exists")
+    # ── Duplicate check on PAN / GST ──
+    dup = check_duplicates(vendor_name, pan_number, gst_number)
+
+    if dup["exact"]:
+        st.error(
+            f"This {label.lower()} already exists — the name, PAN and GST all "
+            f"match an existing record. Nothing has been submitted."
+        )
         st.stop()
+
+    # PAN or GST already used by a different name: warn, but allow it through.
+    warnings = []
+    if dup["pan_matches"]:
+        others = ", ".join(sorted(set(dup["pan_matches"])))
+        warnings.append(f"This **PAN is already registered** under: {others}")
+    if dup["gst_matches"]:
+        others = ", ".join(sorted(set(dup["gst_matches"])))
+        warnings.append(f"This **GST is already registered** under: {others}")
+
+    for w in warnings:
+        st.warning(f"⚠️ {w}")
 
     # Save documents to the database
     for doc_type, upload in _all_uploaders.items():
@@ -565,8 +585,14 @@ if st.button(f"Submit {label}"):
             fname = safe_filename(upload.name)
             save_document(vendor_name, doc_type, fname, upload.getbuffer().tobytes())
 
+    # Sequential ID and submission timestamp
+    party_id = next_party_id(party_type)
+    submitted_on = datetime.now().strftime("%d-%m-%Y")
+
     # ── Build the record ──
     record = {
+        "Party ID": party_id,                   # VFY27001 / CFY27001
+        "Submitted On": submitted_on,
         "Party Type": party_type,               # "Vendor" or "Customer"
         "Vendor Type": vendor_type,             # vendor type, or "Customer"
         "Vendor Name": vendor_name,
@@ -623,7 +649,16 @@ if st.button(f"Submit {label}"):
         "Foreign Supplier": foreign_supplier,
 
         "Vendor Code": "",
+        "BP Code": "",
+        "TDS Status": "",
+
+        # Audit trail — filled in as the application progresses
         "Approved By": "",
+        "Approved On": "",
+        "Reviewed By Finance": "",
+        "Code Created By": "",
+        "Code Created On": "",
+
         "Status": "Pending",
         "Remarks": "",
     }
@@ -642,3 +677,4 @@ if st.button(f"Submit {label}"):
         st.warning(f"{label} saved, but notification email failed: {e}")
 
     st.success(f"{label} Submitted Successfully")
+    st.info(f"Your reference ID is **{party_id}** — please keep it for your records.")

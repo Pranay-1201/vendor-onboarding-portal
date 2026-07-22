@@ -6,7 +6,9 @@ import base64
 
 from gemini_helper import analyze_vendor
 from auth_utils import get_finance_emails
-from db_utils import get_all_vendors, update_vendor, list_documents, get_document_bytes, get_ai_report, save_ai_report
+from db_utils import (get_all_vendors, update_vendor, list_documents,
+                      get_document_bytes, get_ai_report, save_ai_report,
+                      find_duplicate_pans)
 from email_utils import (
     send_vendor_status_email, send_accepted_email, send_code_created_email,
     send_finance_decision_email,
@@ -147,11 +149,37 @@ else:
 
         st.subheader("Vendors")
         all_statuses = sorted(view_df["Status"].unique().tolist())
-        fc, cc = st.columns([1, 1])
+
+        fc, dc1, dc2, cc = st.columns([2, 1.2, 1.2, 1])
         with fc:
             sel = st.multiselect("Filter by status", options=all_statuses,
                                  default=all_statuses, placeholder="Choose statuses")
+
+        # ── Date range filter (on Submitted On) ──
+        import datetime as _dt
+        use_dates = "Submitted On" in view_df.columns
+        with dc1:
+            from_date = st.date_input("From date", value=None,
+                                      format="DD-MM-YYYY", disabled=not use_dates)
+        with dc2:
+            to_date = st.date_input("To date", value=None,
+                                    format="DD-MM-YYYY", disabled=not use_dates)
+
         filtered_df = view_df[view_df["Status"].isin(sel)] if sel else view_df
+
+        if use_dates and (from_date or to_date):
+            def _in_range(val):
+                try:
+                    d = _dt.datetime.strptime(str(val).strip(), "%d-%m-%Y").date()
+                except Exception:
+                    return False          # records with no/bad date drop out when filtering
+                if from_date and d < from_date:
+                    return False
+                if to_date and d > to_date:
+                    return False
+                return True
+            filtered_df = filtered_df[filtered_df["Submitted On"].apply(_in_range)]
+
         with cc:
             st.metric("Showing", f"{len(filtered_df)} / {len(view_df)}")
 
@@ -172,8 +200,78 @@ else:
         vendor_gst = _field(vendor_row, "GST Number", "GST", "GSTIN")
         vendor_details = {c: _field(vendor_row, c) for c in df.columns}
 
-        # ── DOCUMENTS (from MongoDB) ──
+        # ── APPLICATION SUMMARY (ID, dates, who did what) ──
+        st.markdown("---")
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Reference ID", _field(vendor_row, "Party ID") or "—")
+        s2.metric("Submitted On", _field(vendor_row, "Submitted On") or "—")
+        s3.metric("Type", _field(vendor_row, "Party Type") or "—")
+        s4.metric("Status", _field(vendor_row, "Status") or "—")
+
+        with st.expander("👤 Who handled this application", expanded=False):
+            a1, a2 = st.columns(2)
+            with a1:
+                st.write(f"**Assigned to:** {_field(vendor_row, 'Assigned To') or '—'}")
+                st.write(f"**Approved by:** {_field(vendor_row, 'Approved By') or '— not yet —'}")
+                st.write(f"**Approved on:** {_field(vendor_row, 'Approved On') or '— not yet —'}")
+            with a2:
+                st.write(f"**Finance review:** {_field(vendor_row, 'Reviewed By Finance') or '— not yet —'}")
+                st.write(f"**Code created by:** {_field(vendor_row, 'Code Created By') or '— not yet —'}")
+                st.write(f"**Code created on:** {_field(vendor_row, 'Code Created On') or '— not yet —'}")
+
+        # ── DOCUMENT CHECKLIST (what was required vs what arrived) ──
+        REQUIRED_DOCS = {
+            "Customer": ["PAN Proof", "GST Proof", "Cancelled Cheque", "Agreement",
+                         "EFT Form", "MSME Certificate"],
+            "Raw Material Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                      "MSME Certificate"],
+            "Packaging Supplier": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "PM Agreement", "MSME Certificate"],
+            "Logistics Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "Transport License", "Fleet Details", "Agreement",
+                                   "MSME Certificate"],
+            "Warehouse Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                   "Warehouse License", "Quality Audit Report", "Fire NOC",
+                                   "ESG Compliance Certificate", "Insurance Certificate",
+                                   "Agreement", "MSME Certificate"],
+            "Contract Manufacturer": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                      "Agreement", "ESG Compliance Certificate",
+                                      "Quality Audit Report", "Factory License",
+                                      "Manufacturing License", "MSME Certificate"],
+            "Service Provider": ["GST Certificate", "PAN Card", "Cancelled Cheque",
+                                 "Agreement", "Department Head Approval", "MSME Certificate"],
+        }
+
         docs = list_documents(vendor)
+        uploaded_types = {d[0] for d in docs}
+        expected = REQUIRED_DOCS.get(vendor_type, sorted(uploaded_types))
+
+        st.subheader("📋 Document Checklist")
+        checklist = pd.DataFrame([
+            {"Document": d, "Uploaded": "Y" if d in uploaded_types else "N"}
+            for d in expected
+        ])
+        # Anything uploaded that wasn't on the expected list (e.g. re-uploads)
+        extras = sorted(uploaded_types - set(expected))
+        if extras:
+            checklist = pd.concat([
+                checklist,
+                pd.DataFrame([{"Document": d + " (additional)", "Uploaded": "Y"} for d in extras])
+            ], ignore_index=True)
+
+        cl1, cl2 = st.columns([2, 1])
+        with cl1:
+            st.dataframe(checklist, use_container_width=True, hide_index=True)
+        with cl2:
+            got = sum(1 for d in expected if d in uploaded_types)
+            st.metric("Uploaded", f"{got} / {len(expected)}")
+            missing = [d for d in expected if d not in uploaded_types]
+            if missing:
+                st.caption("Missing: " + ", ".join(missing))
+            else:
+                st.caption("All listed documents received.")
+
+        # ── DOCUMENTS (from MongoDB) ──
         if docs:
             st.subheader("📁 Uploaded Documents")
             doc_types = [d[0] for d in docs]
@@ -348,6 +446,27 @@ else:
 
         # ── DECISION AREA ──
         if role == "finance":
+            # Duplicate PAN watch-list — same PAN used by more than one party
+            dup_pans = find_duplicate_pans()
+            if dup_pans:
+                with st.expander(f"⚠️ Duplicate PANs detected ({len(dup_pans)})", expanded=False):
+                    st.caption(
+                        "These PAN numbers appear on more than one application. "
+                        "Worth checking before creating a code."
+                    )
+                    rows = []
+                    for pan, recs in sorted(dup_pans.items()):
+                        for r in recs:
+                            rows.append({
+                                "PAN": pan,
+                                "Reference ID": r.get("Party ID", "—"),
+                                "Name": r.get("Vendor Name", ""),
+                                "Type": r.get("Party Type", ""),
+                                "Status": r.get("Status", ""),
+                                "Submitted On": r.get("Submitted On", "—"),
+                            })
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
             st.subheader("🏦 Finance Review")
             st.write(f"Vendor: **{vendor}**  |  Type: {vendor_type}")
 
@@ -427,6 +546,7 @@ else:
                             "BP Code": bp_code.strip(),
                             "TDS Status": "" if tds_status.startswith("--") else tds_status,
                             "Code Created By": user_email,
+                            "Code Created On": __import__("datetime").datetime.now().strftime("%d-%m-%Y"),
                             "Reviewed By Finance": user_email,
                             "Status": "Code Created",
                         })
@@ -450,7 +570,13 @@ else:
                 remarks = st.text_area("Reason for Rejection",
                                        placeholder="Example: GST Number Invalid")
             if st.button("Update Status"):
-                update_vendor(vendor, {"Status": decision, "Remarks": str(remarks), "Approved By": user_email})
+                from datetime import datetime as _dtm
+                update_vendor(vendor, {
+                    "Status": decision,
+                    "Remarks": str(remarks),
+                    "Approved By": user_email,
+                    "Approved On": _dtm.now().strftime("%d-%m-%Y"),
+                })
                 vendor_details["Status"] = decision
                 try:
                     if decision in ("Rejected", "Pending Documents"):

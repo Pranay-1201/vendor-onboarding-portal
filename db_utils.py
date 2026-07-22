@@ -117,3 +117,96 @@ def find_vendor(vendor_name, gst_number):
         {"Vendor Name": vendor_name, "GST Number": gst_number},
         {"_id": 0}
     )
+
+
+# ─────────────────────────────────────────────
+#  SEQUENTIAL ID  (VFY27001 / CFY27001)
+# ─────────────────────────────────────────────
+def _financial_year_label(when=None):
+    """
+    Indian financial year runs April to March, labelled by the ENDING year.
+    Apr 2026 - Mar 2027  ->  FY27
+    Apr 2027 - Mar 2028  ->  FY28
+    """
+    from datetime import datetime
+    d = when or datetime.now()
+    end_year = d.year + 1 if d.month >= 4 else d.year
+    return f"FY{str(end_year)[-2:]}"
+
+
+def next_party_id(party_type):
+    """
+    Return the next sequential ID, e.g. 'VFY27001' or 'CFY27001'.
+
+    The counter never resets — it keeps climbing across financial years, so the
+    number shows how many have been onboarded in total. Only the FY part changes.
+    """
+    from pymongo import ReturnDocument
+
+    prefix = "V" if party_type == "Vendor" else "C"
+    fy = _financial_year_label()
+
+    counters = _get_db()["counters"]
+    doc = counters.find_one_and_update(
+        {"_id": f"{prefix}_seq"},
+        {"$inc": {"value": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    n = doc.get("value", 1)
+    return f"{prefix}{fy}{n:03d}"
+
+
+# ─────────────────────────────────────────────
+#  DUPLICATE DETECTION  (PAN / GST)
+# ─────────────────────────────────────────────
+def check_duplicates(party_name, pan_number, gst_number):
+    """
+    Look for existing records sharing this PAN or GST.
+
+    Returns:
+      exact       -> True when name + PAN + GST all match an existing record
+      pan_matches -> list of existing names sharing this PAN
+      gst_matches -> list of existing names sharing this GST
+    """
+    result = {"exact": False, "pan_matches": [], "gst_matches": []}
+
+    name = (party_name or "").strip().lower()
+    pan  = (pan_number or "").strip().upper()
+    gst  = (gst_number or "").strip().upper()
+
+    for rec in _vendors().find({}, {"_id": 0, "Vendor Name": 1,
+                                    "PAN Number": 1, "GST Number": 1}):
+        r_name = str(rec.get("Vendor Name", "")).strip().lower()
+        r_pan  = str(rec.get("PAN Number", "")).strip().upper()
+        r_gst  = str(rec.get("GST Number", "")).strip().upper()
+
+        pan_hit = bool(pan) and pan != "NA" and r_pan == pan
+        gst_hit = bool(gst) and gst != "NA" and r_gst == gst
+
+        if r_name == name and pan_hit and gst_hit:
+            result["exact"] = True
+
+        if pan_hit and r_name != name:
+            result["pan_matches"].append(rec.get("Vendor Name", ""))
+        if gst_hit and r_name != name:
+            result["gst_matches"].append(rec.get("Vendor Name", ""))
+
+    return result
+
+
+def find_duplicate_pans():
+    """
+    Return {pan: [records...]} for every PAN used by more than one record.
+    Used by the finance duplicate-PAN table.
+    """
+    by_pan = {}
+    for rec in _vendors().find({}, {"_id": 0, "Vendor Name": 1, "PAN Number": 1,
+                                    "Party ID": 1, "Party Type": 1, "Status": 1,
+                                    "Submitted On": 1}):
+        pan = str(rec.get("PAN Number", "")).strip().upper()
+        if not pan or pan == "NA":
+            continue
+        by_pan.setdefault(pan, []).append(rec)
+
+    return {pan: recs for pan, recs in by_pan.items() if len(recs) > 1}
