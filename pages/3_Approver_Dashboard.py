@@ -296,37 +296,8 @@ else:
                 st.write(f"**Code created by:** {_field(vendor_row, 'Code Created By') or '— not yet —'}")
                 st.write(f"**Code created on:** {_field(vendor_row, 'Code Created On') or '— not yet —'}")
 
-        # ── DOCUMENT CHECKLIST (what was required vs what arrived) ──
-        docs = list_documents(vendor)
-        uploaded_types = {d[0] for d in docs}
-        expected = REQUIRED_DOCS.get(vendor_type, sorted(uploaded_types))
-
-        st.subheader("📋 Document Checklist")
-        checklist = pd.DataFrame([
-            {"Document": d, "Uploaded": "Y" if d in uploaded_types else "N"}
-            for d in expected
-        ])
-        # Anything uploaded that wasn't on the expected list (e.g. re-uploads)
-        extras = sorted(uploaded_types - set(expected))
-        if extras:
-            checklist = pd.concat([
-                checklist,
-                pd.DataFrame([{"Document": d + " (additional)", "Uploaded": "Y"} for d in extras])
-            ], ignore_index=True)
-
-        cl1, cl2 = st.columns([2, 1])
-        with cl1:
-            st.dataframe(checklist, use_container_width=True, hide_index=True)
-        with cl2:
-            got = sum(1 for d in expected if d in uploaded_types)
-            st.metric("Uploaded", f"{got} / {len(expected)}")
-            missing = [d for d in expected if d not in uploaded_types]
-            if missing:
-                st.caption("Missing: " + ", ".join(missing))
-            else:
-                st.caption("All listed documents received.")
-
         # ── DOCUMENTS (from MongoDB) ──
+        docs = list_documents(vendor)
         if docs:
             st.subheader("📁 Uploaded Documents")
             doc_types = [d[0] for d in docs]
